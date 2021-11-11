@@ -1,10 +1,10 @@
 #!/bin/bash
-inDir=0
-njobs=2
-p=mpcb.p
-rt_d=10
+inDir=/gss/work/fasa8837/clust
+njobs=4
+p=mpcs.p 
+rt_d=20
 rt_h=0
-k=21,33,55
+splDir=/user/fasa8837
 while : ; do
     case $1 in
     	-i)
@@ -37,22 +37,23 @@ while : ; do
             rt_h=$1
             shift
             ;;
-        -k)
+        -splDir)
             shift
-            k=$1
+            spl=$1
             shift
             ;;
+
         -h|--help)
-            echo "Splitting list of Metagenome Samples for SPAdes 3.15 assembly and submitting multiple Jobs to CARL"
+            echo "Splitting protein multifasta into several files and submitting multiple Jobs to HPC"
             echo ""
             echo "USAGE:"
-            echo "-i [PATH]: Directory containing forward and reverse reads. Filenames: *_R1.fastq, *_R2.fastq"
-            echo "-njobs [INT]: Number of jobs to submit to CARL. Samples will be equally distibuted among jobs."
-            echo "-p [OPTION]: CARL partition. default: mpcb.p (nodes: 128, max. threads: 16, max memory: 495GB), other options: mpcs.p (nodes: 158, max. threads: 24, max memory: 243GB), mpcp.p (nodes: 2, max. threads: 40, max memory: 1975G)"
+            echo "-i [PATH]: Directory containing protein multifasta"
+            echo "-njobs [INT]: Number of jobs to submit to HPC. Multifasta will be split into [njobs] chunks for parallel processing. Samples will be equally distibuted among jobs."
+            echo "-p [OPTION]: HPC partition. default: mpcb.p (nodes: 128, max. threads: 16, max memory: 495GB), other options: mpcs.p (nodes: 158, max. threads: 24, max memory: 243GB), mpcp.p (nodes: 2, max. threads: 40, max memory: 1975G)"
             echo "-mail [EMAIL ADDRESS]: E-mail address for notification in case of FAIL or FINISH of jobs"
             echo "-rt_d [INT]: max. job runtime in Days. Jobs > 21d will not start! default: 10"
-            echo "-rt_d [INT]: max. job runtime in hours - will be added to -rt_d. Jobs > 21d will not start! default: 0"
-            echo "-k [INT,INT,INT...]: k-mer sizes for assembly. default: 21,33,55"
+            echo "-rt_h [INT]: max. job runtime in hours - will be added to -rt_d. Jobs > 21d will not start! default: 0"
+            echo "-splDir [PATH] path to split_fasta.pl"
             exit
             ;;
         *)  if [ -z "$1" ]; then break; fi
@@ -63,40 +64,65 @@ while : ; do
 done
 
 if [[ "$inDir" == 0 ]]; then
-    echo "Splitting list of Metagenome Samples for SPAdes 3.15 assembly and submitting multiple Jobs to CARL"
+    echo ""
     echo ""
     echo "USAGE:"
-    echo "-i [PATH]: Directory containing forward and reverse reads. Filenames: *_R1.fastq, *_R2.fastq"
-    echo "-njobs [INT]: Number of jobs to submit to CARL. Samples will be equally distibuted among jobs."
-    echo "-p [OPTION]: CARL partition. default: mpcb.p (nodes: 128, max. threads: 16, max memory: 495GB), other options: mpcs.p (nodes: 158, max. threads: 24, max memory: 243GB), mpcp.p (nodes: 2, max. threads: 40, max memory: 1975G)"
+    echo "--i [PATH]: Directory containing protein multifasta"
+    echo "-njobs [INT]: Number of jobs to submit to HPC. Multifasta will be split into [njobs] chunks for parallel processing. Samples will be equally distibuted among jobs."
+    echo "-p [OPTION]: HPC partition. default: mpcb.p (nodes: 128, max. threads: 16, max memory: 495GB), other options: mpcs.p (nodes: 158, max. threads: 24, max memory: 243GB), mpcp.p (nodes: 2, max. threads: 40, max memory: 1975G)"
     echo "-mail [EMAIL ADDRESS]: E-mail address for notification in case of FAIL or FINISH of jobs"
     echo "-rt_d [INT]: max. job runtime in Days. Jobs > 21d will not start! default: 10"
-    echo "-rt_d [INT]: max. job runtime in hours - will be added to -rt_d. Jobs > 21d will not start! default: 0"
-    echo "-k [INT,INT,INT...]: k-mer sizes for assembly. default: 21,33,55"
-
+    echo "-rt_h [INT]: max. job runtime in hours - will be added to -rt_d. Jobs > 21d will not start! default: 0"
+    echo "-splDir [PATH] path to split_fasta.pl"
     exit
 fi
 
 # if [[ "${p}" != "mpcb.p" || "${p}" != "mpcb.s"  || "${p}" != "mpcp.p" ]]; then
 #     echo "ERROR: No valid partition selected!"
-#     echo "-p [OPTION]: CARL partition. default: mpcb.p (nodes: 128, max. threads: 16, max memory: 495GB), other options: mpcs.p (nodes: 158, max. threads: 24, max memory: 243GB), mpcp.p (nodes: 2, max. threads: 40, max memory: 1975G)"
+#     echo "-p [OPTION]: HPC partition. default: mpcb.p (nodes: 128, max. threads: 16, max memory: 495GB), other options: mpcs.p (nodes: 158, max. threads: 24, max memory: 243GB), mpcp.p (nodes: 2, max. threads: 40, max memory: 1975G)"
 #     exit
 # fi
 
 if [[ "$p" == "mpcb.p" ]]; then
-    m=495
-    t=16
+    M=495
+    T=16
 fi
 if [[ "$p" == "mpcs.p" ]]; then
-    m=243
-    t=24
+    M=243
+    T=24
 fi
 if [[ "$p" == "mpcp.p" ]]; then
-    m=1975
-    t=40
+    M=1975
+    T=40
 fi
+echo "using "$p" partition"
+echo "Splitting protein multifasta into "$njobs" files and submitting "$njobs" Jobs to HPC"
 
-( cd $inDir && ls *.fastq ) | cut -f 1 -d . | cut -f 1 -d _ | uniq -d > Files.txt
+##################################################################################################
+#Data prep and file splitting                                                                    #
+##################################################################################################
+
+#count number of sequences in protein multifasta
+nseq=$(grep -c "^>" $inDir/*.fasta)
+#divide sequences by number of jobs
+jseq=$(expr $nseq / $njobs)
+#split protein multifasta by $njobs
+mkdir -p $inDir/split
+#split multifasta with Splitfasta.pl
+perl $splDir/Splitfasta.pl -i $inDir/*.fasta -o $inDir/split/split_prot -n $jseq
+#rename files to .fasta files
+cd $inDir/split
+for f in $inDir/split/* ; do 
+    mv -- "$f" "${f}.fasta"
+done
+cd $inDir
+
+echo "Multifasta input is split into "njobs" files with approximately "$jseq" each"
+
+##################################################################################################
+#multijob submission                                                                             #
+##################################################################################################
+( cd $inDir/split && ls *.fasta ) > Files.txt
 
 nFiles=$(cat ./Files.txt | wc -l)
 nSamples=$(echo "scale=1;($nFiles/$njobs)" | bc | awk '{print ($0-int($0)<0.0001)?int($0):int($0)+1}')
@@ -134,8 +160,7 @@ for ((i=1; i<=njobs; i++)); do
     echo ""
     echo "##### SBATCH --array=1-10%3" >> JOB_$i.slurm
     echo ""
-    echo "bash SPAdes315_MG.sh -i $inDir -m $m -t $t -n $i -k $k" >> JOB_$i.slurm
+    echo "bash cd_hit_hpc.sh -i $inDir -M $m -T $t -n $i" >> JOB_$i.slurm
 
     sbatch JOB_$i.slurm
 done
-rm Files.txt

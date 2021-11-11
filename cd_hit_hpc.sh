@@ -1,0 +1,39 @@
+#!/bin/bash
+while : ; do
+    case $1 in
+      -i)
+            shift
+            inDir=$1
+            shift
+            ;;
+        -m)
+            shift
+            m=$1
+            shift
+            ;;
+        -n)
+            shift
+            n=$1
+            shift
+            ;;
+
+        -h|--help)
+            echo "Heul leiser"
+            exit
+            ;;
+        *)  if [ -z "$1" ]; then break; fi
+            inDir=$1
+            shift
+            ;;
+    esac
+done
+
+main_dir=.
+out_dir=${main_dir}/clusters/$n
+
+mkdir -p ${out_dir}
+
+for s in $(cat Files_${n}.txt); do
+    echo "started cd-hit with jobs "$s"..."
+    cd-hit -in ${main_dir}/split/${s} -o ${out_dir} -M $m -c 0.9 -T $t
+done
