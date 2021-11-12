@@ -1,4 +1,9 @@
 #!/bin/bash
+#load default hpc environment
+module load hpc-env/8.3
+#load cd-hit module
+module load CD-HIT/4.8.1-iccifort-2019b
+
 while : ; do
     case $1 in
       -i)
