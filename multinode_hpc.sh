@@ -1,10 +1,17 @@
 #!/bin/bash
+##################################################################################################
+#change variables here:                                                                          #
+##################################################################################################
 inDir=/gss/work/fasa8837/clust
 njobs=4
 p=mpcs.p 
 rt_d=20
 rt_h=0
 splDir=/user/fasa8837
+mail=benedikt.heyerhoff@uol.de
+##################################################################################################
+#                                                                                                #
+##################################################################################################
 while : ; do
     case $1 in
     	-i)
@@ -77,47 +84,52 @@ if [[ "$inDir" == 0 ]]; then
     exit
 fi
 
-# if [[ "${p}" != "mpcb.p" || "${p}" != "mpcb.s"  || "${p}" != "mpcp.p" ]]; then
+#if [[ "${p}" != "mpcs.p" || "${p}" != "mpcb.p"  || "${p}" != "mpcs.p" ]]; then
 #     echo "ERROR: No valid partition selected!"
 #     echo "-p [OPTION]: HPC partition. default: mpcb.p (nodes: 128, max. threads: 16, max memory: 495GB), other options: mpcs.p (nodes: 158, max. threads: 24, max memory: 243GB), mpcp.p (nodes: 2, max. threads: 40, max memory: 1975G)"
 #     exit
 # fi
 
 if [[ "$p" == "mpcb.p" ]]; then
-    M=495
-    T=16
+    m=495
+    t=16
 fi
 if [[ "$p" == "mpcs.p" ]]; then
-    M=243
-    T=24
+    m=243
+    t=24
 fi
 if [[ "$p" == "mpcp.p" ]]; then
-    M=1975
-    T=40
+    m=1975
+    t=40
 fi
-echo "using "$p" partition"
+echo "Will be submitting to "$p" partition with "$m"GB memory and "$t" cores"
+echo ""
 echo "Splitting protein multifasta into "$njobs" files and submitting "$njobs" Jobs to HPC"
 
 ##################################################################################################
 #Data prep and file splitting                                                                    #
 ##################################################################################################
-
 #count number of sequences in protein multifasta
 nseq=$(grep -c "^>" $inDir/*.fasta)
 #divide sequences by number of jobs
-jseq=$(expr $nseq / $njobs)
+jseq=$(expr $nseq / $njobs + 1000)
 #split protein multifasta by $njobs
 mkdir -p $inDir/split
 #split multifasta with Splitfasta.pl
+echo "Splitting multifasta input into "$njobs" files with approximately "$jseq" sequences each"
+echo ""
 perl $splDir/Splitfasta.pl -i $inDir/*.fasta -o $inDir/split/split_prot -n $jseq
 #rename files to .fasta files
-cd $inDir/split
-for f in $inDir/split/* ; do 
-    mv -- "$f" "${f}.fasta"
+n=1
+for f in $inDir/split*
+do
+  if [ "$f" = "rename.sh" ]
+  then
+    continue
+  fi
+  pre=${file%_*}
+  mv "$f" "split_prot_$((n++)).fasta"
 done
-cd $inDir
-
-echo "Multifasta input is split into "njobs" files with approximately "$jseq" each"
 
 ##################################################################################################
 #multijob submission                                                                             #
@@ -162,5 +174,6 @@ for ((i=1; i<=njobs; i++)); do
     echo ""
     echo "bash cd_hit_hpc.sh -i $inDir -M $m -T $t -n $i" >> JOB_$i.slurm
 
-    sbatch JOB_$i.slurm
+    sbatch JOB_$i.slurm    
 done
+echo "Submitted "$i" jobs to HPC"
