@@ -103,7 +103,7 @@ if [[ "$p" == "mpcp.p" ]]; then
     t=40
 fi
 echo "Will be submitting to "$p" partition with "$m"GB memory and "$t" cores"
-echo ""
+echo " "
 echo "Splitting protein multifasta into "$njobs" files and submitting "$njobs" Jobs to HPC"
 
 ##################################################################################################
@@ -111,7 +111,7 @@ echo "Splitting protein multifasta into "$njobs" files and submitting "$njobs" J
 ##################################################################################################
 #count number of sequences in protein multifasta
 nseq=$(grep -c "^>" $inDir/*.fasta)
-#divide sequences by number of jobs
+#divide sequences by number
 jseq=$(expr $nseq / $njobs + 1000)
 #split protein multifasta by $njobs
 mkdir -p $inDir/split
@@ -119,9 +119,11 @@ mkdir -p $inDir/split
 echo "Splitting multifasta input into "$njobs" files with approximately "$jseq" sequences each"
 echo ""
 perl $splDir/Splitfasta.pl -i $inDir/*.fasta -o $inDir/split/split_prot -n $jseq
+
 #rename files to .fasta files
+cd $inDir/split
 n=1
-for f in $inDir/split*
+for f in *
 do
   if [ "$f" = "rename.sh" ]
   then
@@ -130,7 +132,7 @@ do
   pre=${file%_*}
   mv "$f" "split_prot_$((n++)).fasta"
 done
-
+cd $inDir
 ##################################################################################################
 #multijob submission                                                                             #
 ##################################################################################################
@@ -176,4 +178,4 @@ for ((i=1; i<=njobs; i++)); do
 
     sbatch JOB_$i.slurm    
 done
-echo "Submitted "$i" jobs to HPC"
+echo "Submitted "$njobs" jobs to HPC"
