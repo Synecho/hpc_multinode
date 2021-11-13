@@ -3,6 +3,10 @@
 module load hpc-env/8.3
 #load cd-hit module
 module load CD-HIT/4.8.1-iccifort-2019b
+# Create a temporary directory for the job in local storage
+TMPDIR=/scratch/$USER/$SLURM_JOBID
+export TMPDIR
+mkdir -p $TMPDIR
 
 while : ; do
     case $1 in
